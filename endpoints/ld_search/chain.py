@@ -12,20 +12,30 @@ from langchain_core.prompts import ChatPromptTemplate
 
 dotenv.load_dotenv()
 
-with open("/home/markwh/Documents/larkdown-files/larkdown_docs.pkl", 'rb') as f:
-  docs = pickle.load(f)
-  
-  
+def load_documents(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            docs = pickle.load(f)
+        return docs
+    except FileNotFoundError:
+        print(f"Error: File not found: {file_path}")
+        return []
+    except pickle.UnpicklingError:
+        print(f"Error: Could not unpickle file: {file_path}")
+        return []
+
+file_path = os.getenv("LARKDOWN_DOCS_PKL", "")
+docs = load_documents(file_path)
+
 child_splitter = RecursiveCharacterTextSplitter(
-  chunk_size=400,
+    chunk_size=400,
 )
 
 full_vectorstore = Chroma(
-  collection_name = "full_documents", embedding_function = OpenAIEmbeddings()
+    collection_name="full_documents", embedding_function=OpenAIEmbeddings()
 )
 
 store = InMemoryStore()
-
 
 retriever = ParentDocumentRetriever(
     vectorstore=full_vectorstore,
@@ -35,7 +45,6 @@ retriever = ParentDocumentRetriever(
 )
 
 retriever.add_documents(docs, ids=None)
-
 
 llm = ChatOpenAI(model="gpt-4o-mini")
 
@@ -74,15 +83,14 @@ def combine_docs(documents):
         result += "Source:\n" + source + "\n\nContent:\n" + page_content + "\n\n"
     return result
 
-
 responder = (
-  {
-    "documents_combined": retriever | dedup_docs | combine_docs,
-    "query": RunnablePassthrough(),
-  }
-  | responder_prompt
-  | llm 
-  | StrOutputParser()
+    {
+        "documents_combined": retriever | dedup_docs | combine_docs,
+        "query": RunnablePassthrough(),
+    }
+    | responder_prompt
+    | llm
+    | StrOutputParser()
 )
 
 chain = responder
